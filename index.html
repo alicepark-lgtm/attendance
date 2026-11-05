@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>온라인 출석부 서명</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+/* ================================================================
+   설정 — 행사마다 이 부분만 바꾸면 됩니다.
+   ================================================================ */
+const CONFIG = {
+  // Apps Script 웹 앱 URL (https://script.google.com/macros/s/.../exec)
+  // 비워 두면 "체험 모드"로 동작합니다(이 기기 브라우저에만 저장).
+  SCRIPT_URL: '',
+
+  PDF_URL: 'attendance.pdf',          // 같은 폴더에 둔 원본 출석부 PDF
+  DOWNLOAD_NAME: '출석부_서명완료.pdf',
+  TITLE: '2026 교사 SW교육 특강 출석부',
+  SUBTITLE: '생성형 AI를 활용한 업무 처리 효율화 · 2026. 11. 05.(목) 17:00~21:00',
+
+  // 서명 칸 위치 (PDF 좌표, 단위 pt, 위에서부터 잰 값)
+  SIGN_COL: { x0: 393.6, x1: 532.3 },
+  ROW_LINES: [241.4, 262.8, 284.1, 305.3, 326.6, 347.9, 369.2, 390.5, 411.8, 433.1, 454.3, 475.6],
+
+  PEOPLE: [
+    { no: 1,  school: '단원고등학교',   name: '박소영' },
+    { no: 2,  school: '선부고등학교',   name: '김창곤' },
+    { no: 3,  school: '선일중학교',     name: '김예미' },
+    { no: 4,  school: '성안고등학교',   name: '배상용' },
+    { no: 5,  school: '시곡중학교',     name: '김하경' },
+    { no: 6,  school: '안산해양중학교', name: '양진영' },
+    { no: 7,  school: '양지중학교',     name: '전민선' },
+    { no: 8,  school: '와동중학교',     name: '손예원' },
+    { no: 9,  school: '원곡고등학교',   name: '박수빈' },
+    { no: 10, school: '원곡중학교',     name: '김민지' },
+    { no: 11, school: '초지고등학교',   name: '김혜연' },
+  ],
+};
+</script>
+<style>
+:root{
+  --bg:#f4f6f9; --card:#fff; --ink:#1b2430; --muted:#5d6b7c; --line:#dde3ea;
+  --brand:#2563eb; --brand-ink:#fff; --ok:#15803d; --ok-bg:#e7f6ec; --warn:#b45309; --warn-bg:#fff4e0;
+  --err:#b91c1c; --err-bg:#fdecec; --hl:rgba(37,99,235,.18); --done:rgba(21,128,61,.16);
+  --pad:#fffef8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans KR',system-ui,-apple-system,'Malgun Gothic',sans-serif;line-height:1.5;-webkit-text-size-adjust:100%}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 48px}
+header h1{font-size:1.3rem;margin:0 0 2px}
+header p{margin:0;color:var(--muted);font-size:.92rem}
+.banner{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-size:.88rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:16px}
+.card h2{font-size:1rem;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--brand);color:var(--brand-ink);font-size:.78rem}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:480px){.row2{grid-template-columns:1fr}}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+select,input{width:100%;font:inherit;font-size:1rem;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+select:focus,input:focus{outline:2px solid var(--brand);outline-offset:1px}
+.btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+button{font:inherit;font-size:1rem;padding:11px 18px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+button.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink);font-weight:700;flex:1}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.small{font-size:.85rem;padding:6px 10px}
+.msg{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:.92rem}
+.msg.ok{background:var(--ok-bg);color:var(--ok)} .msg.err{background:var(--err-bg);color:var(--err)} .msg.warn{background:var(--warn-bg);color:var(--warn)}
+.padbox{position:relative;border:2px dashed #b9c4d2;border-radius:12px;background:var(--pad);aspect-ratio:3/1;touch-action:none;overflow:hidden}
+.padbox canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.padbox .ph{position:absolute;inset:0;display:grid;place-items:center;color:#a3adba;font-size:1.05rem;pointer-events:none}
+.padbox .who{position:absolute;left:10px;top:6px;font-size:.8rem;color:var(--muted);pointer-events:none}
+.sheet{position:relative;margin-top:4px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.sheet canvas{display:block;width:100%;height:auto}
+.cell{position:absolute;display:grid;place-items:center;font-size:clamp(8px,1.6vw,12px);font-weight:700;color:var(--ok)}
+.cell.done{background:var(--done)}
+.cell.me{background:var(--hl);outline:2px solid var(--brand);color:var(--brand)}
+.cell img{max-width:96%;max-height:90%;object-fit:contain}
+.hint{font-size:.85rem;color:var(--muted);margin:6px 0 0}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
+td.c,th.c{text-align:center}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.78rem}
+.tag.y{background:var(--ok-bg);color:var(--ok)} .tag.n{background:#eef1f5;color:var(--muted)}
+.hidden{display:none!important}
+footer{margin-top:28px;text-align:center;font-size:.78rem;color:var(--muted)}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title"></h1>
+    <p id="subtitle"></p>
+    <div id="demoBanner" class="banner hidden">체험 모드입니다. 서명이 이 기기에만 저장됩니다. Apps Script 주소를 설정하면 모든 참석자의 서명이 한곳에 모입니다.</div>
+  </header>
+
+  <!-- ===== 참석자 화면 ===== -->
+  <main id="signView">
+    <section class="card">
+      <h2><span class="step">1</span>소속과 성명을 선택하세요</h2>
+      <div class="row2">
+        <div><label for="school">소속</label><select id="school"></select></div>
+        <div><label for="person">성명</label><select id="person" disabled></select></div>
+      </div>
+      <div id="selMsg"></div>
+    </section>
+
+    <section class="card hidden" id="padCard">
+      <h2><span class="step">2</span>아래 칸에 서명하세요</h2>
+      <div class="padbox" id="padbox">
+        <span class="who" id="padWho"></span>
+        <span class="ph" id="padPh">여기에 손가락이나 마우스로 서명</span>
+        <canvas id="pad"></canvas>
+      </div>
+      <div class="btns">
+        <button id="clearBtn" type="button">다시 쓰기</button>
+        <button id="submitBtn" class="primary" type="button" disabled>서명 제출</button>
+      </div>
+      <div id="padMsg"></div>
+    </section>
+
+    <section class="card">
+      <h2>출석부 미리보기</h2>
+      <div class="sheet" id="sheet"><canvas id="pdfCanvas"></canvas></div>
+      <p class="hint">파란 칸이 내 서명이 들어갈 자리, 초록 칸은 이미 서명한 분입니다.</p>
+    </section>
+  </main>
+
+  <!-- ===== 관리자 화면 (?admin) ===== -->
+  <main id="adminView" class="hidden">
+    <section class="card" id="loginCard">
+      <h2>관리자</h2>
+      <label for="adminKey">관리자 비밀번호</label>
+      <input id="adminKey" type="password" autocomplete="current-password">
+      <div class="btns"><button id="loginBtn" class="primary" type="button">서명 불러오기</button></div>
+      <div id="loginMsg"></div>
+    </section>
+    <section class="card hidden" id="adminCard">
+      <h2>서명 현황 <span id="countTag" class="tag y"></span></h2>
+      <div class="btns" style="margin-top:0;margin-bottom:12px">
+        <button id="downloadBtn" class="primary" type="button">완성본 PDF 내려받기</button>
+        <button id="refreshBtn" type="button">새로고침</button>
+      </div>
+      <div id="adminMsg"></div>
+      <table><thead><tr><th class="c">NO</th><th>소속</th><th>성명</th><th class="c">상태</th><th class="c"></th></tr></thead><tbody id="adminRows"></tbody></table>
+    </section>
+    <section class="card hidden" id="adminSheetCard">
+      <h2>출석부 미리보기</h2>
+      <div class="sheet" id="adminSheet"><canvas id="adminPdfCanvas"></canvas></div>
+    </section>
+  </main>
+
+  <footer><a id="modeLink" href="?admin">관리자</a></footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const DEMO = !CONFIG.SCRIPT_URL;
+  const ADMIN = new URLSearchParams(location.search).has('admin');
+  const DEMO_KEY = 'attendance-demo:' + CONFIG.TITLE;
+
+  $('title').textContent = CONFIG.TITLE;
+  $('subtitle').textContent = CONFIG.SUBTITLE;
+  document.title = ADMIN ? '출석부 관리' : '온라인 출석부 서명';
+  if (DEMO) $('demoBanner').classList.remove('hidden');
+
+  function showMsg(el, kind, text) {
+    el.innerHTML = '';
+    if (!text) return;
+    const d = document.createElement('div');
+    d.className = 'msg ' + kind;
+    d.textContent = text;
+    el.appendChild(d);
+  }
+
+  /* ---------------- 저장소 (Apps Script 또는 체험 모드) ---------------- */
+  function demoLoad() { try { return JSON.parse(localStorage.getItem(DEMO_KEY) || '[]'); } catch (e) { return []; } }
+  function demoSave(items) { try { localStorage.setItem(DEMO_KEY, JSON.stringify(items)); } catch (e) {} }
+  function nowStr() { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+
+  const api = {
+    async status() {
+      if (DEMO) return demoLoad().map((r) => ({ no: r.no, time: r.time }));
+      const r = await fetch(CONFIG.SCRIPT_URL + '?action=status&t=' + Date.now());
+      const j = await r.json(); if (!j.ok) throw new Error(j.error); return j.items;
+    },
+    async list(key) {
+      if (DEMO) return demoLoad();
+      const r = await fetch(CONFIG.SCRIPT_URL + '?action=list&key=' + encodeURIComponent(key) + '&t=' + Date.now());
+      const j = await r.json(); if (!j.ok) throw new Error(j.error); return j.items;
+    },
+    async post(body) {
+      if (DEMO) {
+        const items = demoLoad();
+        if (body.action === 'sign') {
+          if (items.some((r) => r.no === body.no)) throw new Error('이미 서명이 등록되어 있습니다. 다시 하려면 담당자에게 초기화를 요청하세요.');
+          items.push({ no: body.no, school: body.school, name: body.name, sig: body.sig, time: nowStr() });
+        } else if (body.action === 'reset') {
+          demoSave(items.filter((r) => r.no !== body.no)); return;
+        }
+        demoSave(items); return;
+      }
+      const r = await fetch(CONFIG.SCRIPT_URL, { method: 'POST', body: JSON.stringify(body) });
+      const j = await r.json(); if (!j.ok) throw new Error(j.error);
+    },
+  };
+
+  /* ---------------- PDF 미리보기 ---------------- */
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  let pdfBytesPromise = null;
+  function pdfBytes() {
+    if (!pdfBytesPromise) pdfBytesPromise = fetch(CONFIG.PDF_URL).then((r) => { if (!r.ok) throw new Error('출석부 PDF를 불러오지 못했습니다.'); return r.arrayBuffer(); });
+    return pdfBytesPromise;
+  }
+  let pageInfo = null; // {w,h} in pt
+  async function renderPdf(canvas) {
+    const buf = await pdfBytes();
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
+    const page = await doc.getPage(1);
+    const vp1 = page.getViewport({ scale: 1 });
+    pageInfo = { w: vp1.width, h: vp1.height };
+    const scale = Math.min(3, (window.devicePixelRatio || 1) * 1.6);
+    const vp = page.getViewport({ scale });
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  }
+  function cellRect(no) {
+    const i = no - 1, L = CONFIG.ROW_LINES;
+    if (i < 0 || i + 1 >= L.length) return null;
+    return { x: CONFIG.SIGN_COL.x0, y: L[i], w: CONFIG.SIGN_COL.x1 - CONFIG.SIGN_COL.x0, h: L[i + 1] - L[i] };
+  }
+  // overlays: [{no, cls, text?, img?}]
+  function drawOverlays(sheetEl, overlays) {
+    sheetEl.querySelectorAll('.cell').forEach((e) => e.remove());
+    if (!pageInfo) return;
+    overlays.forEach((o) => {
+      const r = cellRect(o.no); if (!r) return;
+      const d = document.createElement('div');
+      d.className = 'cell ' + (o.cls || '');
+      d.style.left = (r.x / pageInfo.w * 100) + '%';
+      d.style.top = (r.y / pageInfo.h * 100) + '%';
+      d.style.width = (r.w / pageInfo.w * 100) + '%';
+      d.style.height = (r.h / pageInfo.h * 100) + '%';
+      if (o.img) { const im = new Image(); im.src = o.img; im.alt = '서명'; d.appendChild(im); }
+      else if (o.text) d.textContent = o.text;
+      sheetEl.appendChild(d);
+    });
+  }
+
+  /* ---------------- 서명 패드 ---------------- */
+  function SignaturePad(canvas, onChange) {
+    const ctx = canvas.getContext('2d');
+    let drawing = false, pts = [], dirty = false;
+    function resize() {
+      const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      const keep = dirty ? canvas.toDataURL() : null;
+      canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111827';
+      ctx.lineWidth = Math.max(2.4, r.width / 160);
+      if (keep) { const im = new Image(); im.onload = () => { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(im, 0, 0, canvas.width, canvas.height); ctx.restore(); }; im.src = keep; }
+    }
+    function pos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+      drawing = true; pts = [pos(e)];
+      const p = pts[0]; ctx.beginPath(); ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+      if (!dirty) { dirty = true; onChange(true); }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drawing) return; e.preventDefault();
+      pts.push(pos(e));
+      if (pts.length < 3) return;
+      const [a, b, c] = pts.slice(-3);
+      ctx.beginPath();
+      ctx.moveTo((a.x + b.x) / 2, (a.y + b.y) / 2);
+      ctx.quadraticCurveTo(b.x, b.y, (b.x + c.x) / 2, (b.y + c.y) / 2);
+      ctx.stroke();
+    });
+    const end = () => { drawing = false; pts = []; };
+    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('pointerleave', end);
+    window.addEventListener('resize', resize);
+    return {
+      resize,
+      clear() { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); dirty = false; onChange(false); },
+      isEmpty() { return !dirty; },
+      // 잉크가 있는 부분만 잘라 작은 PNG로
+      export() {
+        const w = canvas.width, h = canvas.height, data = ctx.getImageData(0, 0, w, h).data;
+        let x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          if (data[(y * w + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+        if (x1 < 0) return null;
+        const m = 6; x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(w - 1, x1 + m); y1 = Math.min(h - 1, y1 + m);
+        const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+        if (cw < 24 * (window.devicePixelRatio || 1) && ch < 24 * (window.devicePixelRatio || 1)) return 'tiny';
+        let s = Math.min(1, 520 / cw, 150 / ch), url;
+        for (let k = 0; k < 6; k++) {
+          const o = document.createElement('canvas');
+          o.width = Math.max(1, Math.round(cw * s)); o.height = Math.max(1, Math.round(ch * s));
+          o.getContext('2d').drawImage(canvas, x0, y0, cw, ch, 0, 0, o.width, o.height);
+          url = o.toDataURL('image/png');
+          if (url.length < 45000) return url;
+          s *= 0.75;
+        }
+        return url;
+      },
+    };
+  }
+
+  /* ================= 참석자 화면 ================= */
+  async function initSign() {
+    const schoolSel = $('school'), personSel = $('person');
+    let status = []; // [{no,time}]
+    let current = null;
+    let mySig = null;
+
+    const schools = [...new Set(CONFIG.PEOPLE.map((p) => p.school))];
+    schoolSel.innerHTML = '<option value="">소속 선택</option>' + schools.map((s) => '<option></option>').join('');
+    schools.forEach((s, i) => { schoolSel.options[i + 1].value = s; schoolSel.options[i + 1].textContent = s; });
+    personSel.innerHTML = '<option value="">먼저 소속을 선택하세요</option>';
+
+    const pad = SignaturePad($('pad'), (has) => { $('submitBtn').disabled = !has; $('padPh').classList.toggle('hidden', has); });
+    $('clearBtn').onclick = () => { pad.clear(); showMsg($('padMsg')); };
+
+    function refreshOverlays() {
+      const signed = new Map(status.map((s) => [s.no, s]));
+      const ov = [];
+      CONFIG.PEOPLE.forEach((p) => {
+        if (current && p.no === current.no) {
+          if (mySig) ov.push({ no: p.no, cls: 'me', img: mySig });
+          else ov.push({ no: p.no, cls: signed.has(p.no) ? 'me done' : 'me', text: signed.has(p.no) ? '서명 완료' : '여기에 서명' });
+        } else if (signed.has(p.no)) ov.push({ no: p.no, cls: 'done', text: '✓ 서명 완료' });
+      });
+      drawOverlays($('sheet'), ov);
+    }
+
+    function onSelect() {
+      const no = Number(personSel.value);
+      current = CONFIG.PEOPLE.find((p) => p.no === no) || null;
+      mySig = null; pad.clear(); showMsg($('padMsg'));
+      if (!current) { $('padCard').classList.add('hidden'); showMsg($('selMsg')); refreshOverlays(); return; }
+      const s = status.find((x) => x.no === current.no);
+      if (s) {
+        $('padCard').classList.add('hidden');
+        showMsg($('selMsg'), 'ok', current.name + ' 선생님은 이미 서명하셨습니다' + (s.time ? ' (' + s.time + ')' : '') + '. 다시 하려면 담당자에게 요청하세요.');
+      } else {
+        showMsg($('selMsg'));
+        $('padWho').textContent = current.school + ' ' + current.name;
+        $('padCard').classList.remove('hidden');
+        requestAnimationFrame(() => { pad.resize(); $('padCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      }
+      refreshOverlays();
+    }
+
+    schoolSel.onchange = () => {
+      const list = CONFIG.PEOPLE.filter((p) => p.school === schoolSel.value);
+      personSel.innerHTML = '';
+      if (!list.length) { personSel.disabled = true; personSel.innerHTML = '<option value="">먼저 소속을 선택하세요</option>'; onSelect(); return; }
+      if (list.length > 1) personSel.add(new Option('성명 선택', ''));
+      list.forEach((p) => personSel.add(new Option(p.name, String(p.no))));
+      personSel.disabled = false;
+      onSelect();
+    };
+    personSel.onchange = onSelect;
+
+    $('submitBtn').onclick = async () => {
+      if (!current) return;
+      const sig = pad.export();
+      if (!sig || sig === 'tiny') { showMsg($('padMsg'), 'warn', '서명을 조금 더 크게 써 주세요.'); return; }
+      const btn = $('submitBtn'); btn.disabled = true; btn.textContent = '제출 중…';
+      try {
+        await api.post({ action: 'sign', no: current.no, school: current.school, name: current.name, sig });
+        mySig = sig;
+        status.push({ no: current.no, time: nowStr() });
+        $('padCard').classList.add('hidden');
+        showMsg($('selMsg'), 'ok', '서명이 출석부에 들어갔습니다. 감사합니다, ' + current.name + ' 선생님!');
+        refreshOverlays();
+        $('sheet').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (e) {
+        showMsg($('padMsg'), 'err', '제출하지 못했습니다: ' + e.message);
+      } finally { btn.textContent = '서명 제출'; btn.disabled = pad.isEmpty(); }
+    };
+
+    try { await renderPdf($('pdfCanvas')); } catch (e) { showMsg($('selMsg'), 'err', e.message); }
+    try { status = await api.status(); } catch (e) { showMsg($('selMsg'), 'err', '서명 현황을 불러오지 못했습니다: ' + e.message); }
+    refreshOverlays();
+  }
+
+  /* ================= 관리자 화면 ================= */
+  async function initAdmin() {
+    $('signView').classList.add('hidden'); $('adminView').classList.remove('hidden');
+    $('modeLink').textContent = '서명 화면으로'; $('modeLink').href = location.pathname;
+    let key = '', items = [];
+    try { key = sessionStorage.getItem('att-admin-key') || ''; } catch (e) {}
+    $('adminKey').value = key;
+    if (DEMO) $('adminKey').placeholder = '체험 모드: 아무 값이나 입력';
+    const rendered = renderPdf($('adminPdfCanvas')).catch((e) => showMsg($('loginMsg'), 'err', e.message));
+
+    async function load() {
+      key = $('adminKey').value.trim();
+      if (!key && !DEMO) { showMsg($('loginMsg'), 'warn', '비밀번호를 입력하세요.'); return; }
+      showMsg($('loginMsg'), 'warn', '불러오는 중…');
+      try {
+        items = await api.list(key);
+        try { sessionStorage.setItem('att-admin-key', key); } catch (e) {}
+        showMsg($('loginMsg'));
+        $('loginCard').classList.add('hidden');
+        $('adminCard').classList.remove('hidden'); $('adminSheetCard').classList.remove('hidden');
+        await rendered; render();
+      } catch (e) { showMsg($('loginMsg'), 'err', e.message); }
+    }
+
+    function render() {
+      const byNo = new Map(items.map((r) => [r.no, r]));
+      $('countTag').textContent = byNo.size + ' / ' + CONFIG.PEOPLE.length + '명';
+      const tb = $('adminRows'); tb.innerHTML = '';
+      CONFIG.PEOPLE.forEach((p) => {
+        const r = byNo.get(p.no), tr = document.createElement('tr');
+        const cells = [p.no, p.school, p.name];
+        cells.forEach((v, i) => { const td = document.createElement('td'); td.textContent = v; if (i === 0) td.className = 'c'; tr.appendChild(td); });
+        const st = document.createElement('td'); st.className = 'c';
+        st.innerHTML = r ? '<span class="tag y"></span>' : '<span class="tag n">미서명</span>';
+        if (r) st.firstChild.textContent = '완료 ' + (r.time || '');
+        tr.appendChild(st);
+        const act = document.createElement('td'); act.className = 'c';
+        if (r) {
+          const b = document.createElement('button'); b.className = 'small'; b.type = 'button'; b.textContent = '초기화';
+          b.onclick = async () => {
+            if (!confirm(p.name + ' 선생님의 서명을 지울까요?')) return;
+            b.disabled = true;
+            try { await api.post({ action: 'reset', no: p.no, key }); items = await api.list(key); render(); }
+            catch (e) { showMsg($('adminMsg'), 'err', e.message); b.disabled = false; }
+          };
+          act.appendChild(b);
+        }
+        tr.appendChild(act); tb.appendChild(tr);
+      });
+      drawOverlays($('adminSheet'), items.map((r) => ({ no: r.no, img: r.sig })));
+    }
+
+    async function download() {
+      const btn = $('downloadBtn'); btn.disabled = true; btn.textContent = 'PDF 만드는 중…';
+      try {
+        items = await api.list(key); render();
+        const doc = await PDFLib.PDFDocument.load(await pdfBytes());
+        const page = doc.getPage(0), H = page.getHeight();
+        for (const r of items) {
+          const c = cellRect(r.no); if (!c || !r.sig) continue;
+          const img = await doc.embedPng(r.sig);
+          const pad = 1.5, bw = c.w - pad * 2, bh = c.h - pad * 2;
+          const s = Math.min(bw / img.width, bh / img.height);
+          const w = img.width * s, h = img.height * s;
+          page.drawImage(img, { x: c.x + (c.w - w) / 2, y: H - (c.y + (c.h + h) / 2), width: w, height: h });
+        }
+        const blob = new Blob([await doc.save()], { type: 'application/pdf' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = CONFIG.DOWNLOAD_NAME;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        showMsg($('adminMsg'), 'ok', '서명 ' + items.length + '개를 넣은 PDF를 만들었습니다.');
+      } catch (e) { showMsg($('adminMsg'), 'err', 'PDF를 만들지 못했습니다: ' + e.message); }
+      finally { btn.disabled = false; btn.textContent = '완성본 PDF 내려받기'; }
+    }
+
+    $('loginBtn').onclick = load;
+    $('adminKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+    $('refreshBtn').onclick = async () => { try { items = await api.list(key); render(); showMsg($('adminMsg')); } catch (e) { showMsg($('adminMsg'), 'err', e.message); } };
+    $('downloadBtn').onclick = download;
+    if (key || DEMO) load();
+  }
+
+  if (ADMIN) initAdmin(); else initSign();
+})();
+</script>
+</body>
+</html>
