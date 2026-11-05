@@ -25,6 +25,8 @@ const CONFIG = {
   // 서명 칸 위치 (PDF 좌표, 단위 pt, 위에서부터 잰 값)
   SIGN_COL: { x0: 393.6, x1: 532.3 },
   ROW_LINES: [241.4, 262.8, 284.1, 305.3, 326.6, 347.9, 369.2, 390.5, 411.8, 433.1, 454.3, 475.6],
+  // 서명이 칸에서 차지할 최대 비율 (가로, 세로). 작게 하려면 숫자를 줄이세요.
+  SIG_FIT: { w: 0.7, h: 0.72 },
 
   PEOPLE: [
     { no: 1,  school: '단원고등학교',   name: '박소영' },
@@ -78,7 +80,7 @@ button.small{font-size:.85rem;padding:6px 10px}
 .cell{position:absolute;display:grid;place-items:center;font-size:clamp(8px,1.6vw,12px);font-weight:700;color:var(--ok)}
 .cell.done{background:var(--done)}
 .cell.me{background:var(--hl);outline:2px solid var(--brand);color:var(--brand)}
-.cell img{max-width:96%;max-height:90%;object-fit:contain}
+.cell img{position:absolute;object-fit:contain;object-position:center}
 .hint{font-size:.85rem;color:var(--muted);margin:6px 0 0}
 table{width:100%;border-collapse:collapse;font-size:.9rem}
 th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
@@ -247,7 +249,13 @@ footer a{color:inherit}
       d.style.top = (r.y / pageInfo.h * 100) + '%';
       d.style.width = (r.w / pageInfo.w * 100) + '%';
       d.style.height = (r.h / pageInfo.h * 100) + '%';
-      if (o.img) { const im = new Image(); im.src = o.img; im.alt = '서명'; d.appendChild(im); }
+      if (o.img) {
+        const im = new Image(), f = CONFIG.SIG_FIT;
+        im.alt = '서명';
+        im.style.width = (f.w * 100) + '%'; im.style.height = (f.h * 100) + '%';
+        im.style.left = ((1 - f.w) / 2 * 100) + '%'; im.style.top = ((1 - f.h) / 2 * 100) + '%';
+        im.src = o.img; d.appendChild(im);
+      }
       else if (o.text) d.textContent = o.text;
       sheetEl.appendChild(d);
     });
@@ -455,7 +463,7 @@ footer a{color:inherit}
         for (const r of items) {
           const c = cellRect(r.no); if (!c || !r.sig) continue;
           const img = await doc.embedPng(r.sig);
-          const pad = 1.5, bw = c.w - pad * 2, bh = c.h - pad * 2;
+          const bw = c.w * CONFIG.SIG_FIT.w, bh = c.h * CONFIG.SIG_FIT.h;
           const s = Math.min(bw / img.width, bh / img.height);
           const w = img.width * s, h = img.height * s;
           page.drawImage(img, { x: c.x + (c.w - w) / 2, y: H - (c.y + (c.h + h) / 2), width: w, height: h });
